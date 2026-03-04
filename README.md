@@ -26,8 +26,8 @@ Because the `step` function only receives a snapshot of the *current* prices, yo
 
 ### ⚠️ Trading Rules & Constraints
 The `engine.py` will strictly validate your output at every step. If you violate these rules, the backtest will instantly fail and throw an error:
-1.  **No Short Selling**: Every individual weight must be \( \ge 0 \).
-2.  **No Leverage**: The sum of your weights must be \( \le 1.0 \). 
+1.  **No Short Selling**: Every individual weight must be $\ge 0\$.
+2.  **No Leverage**: The sum of your weights must be $\le 1.0$. 
 3.  **Cash Handling**: If the sum of your weights is less than 1.0, the engine assumes the remaining portion is held in cash. Cash earns a 0% return.
 
 ## 🚀 How to Run and Test
