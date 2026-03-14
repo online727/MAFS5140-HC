@@ -5,7 +5,7 @@ from strategy import Strategy
 
 def main():
     # 1. Define the path to the dataset
-    data_path = "data_downloader/test.parquet" 
+    data_path = "data/mini1/validation.parquet" 
     
     try:
         # 2. Initialize components
