@@ -1,4 +1,6 @@
 import pandas as pd
+import numpy as np
+from scipy.optimize import minimize
 
 """
 STUDENT INSTRUCTIONS:
@@ -15,21 +17,102 @@ STUDENT INSTRUCTIONS:
 class Strategy:
     def __init__(self):
         """
-        Initialize any state variables here.
-        This function is called exactly once at the very beginning of the backtest.
-        
-        GUIDANCE:
-        - You can create state variables using 'self.' to store data across steps.
-        - For example, you might want to store historical market data, indicators, 
-          or previous portfolio allocations.
-        - PERFORMANCE WARNING: Storing too much historical data in memory (e.g., 
-          growing a list infinitely) can significantly slow down the backtest or 
-          cause memory crashes. Always try to keep only the data you need. 
+        Standard Mean-Variance Optimization Strategy
+        Objective:
+            maximize    mu^T w - (gamma / 2) * w^T Sigma w
+
+        Constraints:
+            w_i >= 0
+            sum(w) <= 1
+
+        Notes:
+        - long-only
+        - no leverage
+        - cash is allowed implicitly when sum(w) < 1
         """
-        # EXAMPLE STATE VARIABLES (Modify or remove these for your strategy):
-        # We will use a list to store the historical price Series
         self.price_history = []
+
+        # Rolling window length for estimating mu and Sigma
         self.lookback_period = 78
+
+        # Risk aversion coefficient gamma
+        self.gamma = 10.0
+
+        # Numerical stabilization for covariance matrix
+        self.ridge = 1e-5
+
+        # Optional upper bound per asset to avoid extreme concentration
+        # Set to 1.0 if you do not want a cap
+        self.max_weight_per_asset = 1.0
+
+    def _estimate_inputs(self, history_df: pd.DataFrame):
+        """
+        Estimate expected returns and covariance matrix from price history.
+        """
+        returns = history_df.pct_change().dropna()
+
+        if returns.empty:
+            return None, None
+
+        mu = returns.mean().values
+        sigma = returns.cov().values
+
+        # Ridge regularization for numerical stability
+        n = sigma.shape[0]
+        sigma = sigma + self.ridge * np.eye(n)
+
+        return mu, sigma
+
+    def _solve_mean_variance(self, mu: np.ndarray, sigma: np.ndarray, tickers) -> pd.Series:
+        """
+        Solve the constrained mean-variance optimization:
+            maximize    mu^T w - (gamma / 2) * w^T Sigma w
+            subject to  sum(w) <= 1
+                        w_i >= 0
+        """
+        n = len(mu)
+
+        # Objective for scipy minimize: convert maximization to minimization
+        def objective(w):
+            portfolio_return = np.dot(mu, w)
+            portfolio_variance = np.dot(w, sigma @ w)
+            utility = portfolio_return - 0.5 * self.gamma * portfolio_variance
+            return -utility
+
+        # Sum of weights <= 1
+        constraints = [
+            {"type": "ineq", "fun": lambda w: 1.0 - np.sum(w)}
+        ]
+
+        # Long-only bounds
+        bounds = [(0.0, self.max_weight_per_asset) for _ in range(n)]
+
+        # Initial guess: equally weighted but scaled to satisfy sum <= 1
+        x0 = np.ones(n) / n
+        if x0.sum() > 1.0:
+            x0 = x0 / x0.sum()
+
+        result = minimize(
+            objective,
+            x0=x0,
+            method="SLSQP",
+            bounds=bounds,
+            constraints=constraints,
+            options={"maxiter": 200, "ftol": 1e-9, "disp": False}
+        )
+
+        if not result.success:
+            # Fallback: stay in cash
+            return pd.Series(0.0, index=tickers)
+
+        weights = pd.Series(result.x, index=tickers)
+
+        # Final cleanup for tiny numerical issues
+        weights = weights.clip(lower=0.0)
+        if weights.sum() > 1.0:
+            weights = weights / weights.sum()
+
+        return weights
 
     def step(self, current_market_data: pd.DataFrame) -> pd.Series:
         """
@@ -45,50 +128,40 @@ class Strategy:
         pd.Series: Target weights for the portfolio.
                    Index = Tickers, Values = Weights (0.0 to 1.0).
                    The sum of weights must be <= 1.0.
-                   
-        GUIDANCE:
-        - The code below is just a reference/example implementation. 
-        - Please completely modify this function to reflect your own trading logic.
         """
-        
-        # --- START OF EXAMPLE STRATEGY LOGIC ---
-        
         if "close" not in current_market_data.columns:
             raise ValueError("Input market data must contain a 'close' column.")
 
-        current_prices = current_market_data["close"]
+        current_prices = current_market_data["close"].astype(float)
 
-        # 1. Update internal state with the new data
+        # Save current prices
         self.price_history.append(current_prices)
-        
-        # Keep only the required lookback period to save memory (Best Practice!)
-        if len(self.price_history) > self.lookback_period:
+
+        # Keep only needed history to control memory usage
+        if len(self.price_history) > self.lookback_period + 1:
             self.price_history.pop(0)
-            
-        # 2. Strategy Logic
-        # If we don't have enough data yet, stay 100% in cash (return all zeros)
-        if len(self.price_history) < self.lookback_period:
+
+        # Need enough price points to compute returns
+        if len(self.price_history) < self.lookback_period + 1:
             return pd.Series(0.0, index=current_prices.index)
-            
-        # Convert our history list into a DataFrame to easily calculate the mean
+
+        # Build historical price DataFrame
         history_df = pd.DataFrame(self.price_history)
-        moving_average = history_df.mean()
-        
-        # Identify assets where the current price is ABOVE its moving average (Trend Following)
-        bullish_assets = current_prices[current_prices > moving_average].index
-        
-        # 3. Portfolio Allocation
-        # Initialize all weights to 0.0
-        weights = pd.Series(0.0, index=current_prices.index)
-        
-        # Allocate equally among bullish assets
-        num_bullish = len(bullish_assets)
-        if num_bullish > 0:
-            weight_per_asset = 1.0 / num_bullish
-            weights[bullish_assets] = weight_per_asset
-            
-        # Return the weights. 
-        # The engine will verify that weights >= 0 and weights.sum() <= 1.0
+
+        # Estimate mu and Sigma
+        mu, sigma = self._estimate_inputs(history_df)
+
+        if mu is None or sigma is None:
+            return pd.Series(0.0, index=current_prices.index)
+
+        # Solve mean-variance optimization
+        weights = self._solve_mean_variance(mu, sigma, current_prices.index)
+
+        # Final strict alignment with engine requirements
+        weights = weights.reindex(current_prices.index).fillna(0.0)
+        weights = weights.clip(lower=0.0)
+
+        if weights.sum() > 1.0:
+            weights = weights / weights.sum()
+
         return weights
-        
-        # --- END OF EXAMPLE STRATEGY LOGIC ---
