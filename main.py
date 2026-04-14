@@ -1,11 +1,11 @@
 from data_feed import DataFeed
 from engine import BacktestEngine
 from evaluator import Evaluator
-from strategy import Strategy 
+from strategy import EqualWeightStrategy, MovingAverageStrategy, MeanVarianceStrategy
 
 def main():
     # 1. Define the path to the dataset
-    data_path = "data/mini1/validation.parquet" 
+    data_path = "data/mini2/test.parquet" 
     
     try:
         # 2. Initialize components
@@ -13,7 +13,7 @@ def main():
         feed = DataFeed(data_path)
         
         print("Initializing strategy...")
-        strategy = Strategy()
+        strategy = EqualWeightStrategy()
         
         engine = BacktestEngine(data_feed=feed, strategy=strategy)
         
