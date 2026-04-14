@@ -16,27 +16,9 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+from utils import load_tabular_data
 
 EPSILON = 1e-6
-
-
-def load_tabular_data(path: str | Path) -> pd.DataFrame:
-    path = Path(path)
-    suffix = path.suffix.lower()
-
-    if suffix == ".parquet":
-        try:
-            return pd.read_parquet(path)
-        except Exception:
-            return pd.read_parquet(path, engine="fastparquet")
-
-    if suffix == ".csv":
-        return pd.read_csv(path)
-
-    if suffix in {".pkl", ".pickle"}:
-        return pd.read_pickle(path)
-
-    raise ValueError(f"Unsupported file format: {path}")
 
 
 def extract_close_prices(market_data: pd.DataFrame) -> pd.DataFrame:
@@ -61,7 +43,7 @@ def extract_close_prices(market_data: pd.DataFrame) -> pd.DataFrame:
     if close_prices.isna().any().any():
         raise ValueError("Market close prices contain NaN values.")
 
-    return close_prices
+    return close_prices#.iloc[-78*365:]  # Use last 1 year of data for backtesting
 
 
 def prepare_signal_frame(
