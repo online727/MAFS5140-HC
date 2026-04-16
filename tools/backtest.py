@@ -43,7 +43,7 @@ def extract_close_prices(market_data: pd.DataFrame) -> pd.DataFrame:
     if close_prices.isna().any().any():
         raise ValueError("Market close prices contain NaN values.")
 
-    return close_prices#.iloc[-78*365:]  # Use last 1 year of data for backtesting
+    return close_prices
 
 
 def prepare_signal_frame(

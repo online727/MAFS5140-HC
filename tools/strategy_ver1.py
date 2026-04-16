@@ -86,7 +86,7 @@ def extract_close_volume_frames(market_data: pd.DataFrame) -> tuple[pd.DataFrame
     if not close_prices.columns.equals(volume.columns):
         raise ValueError("Close and volume columns are not aligned.")
 
-    return close_prices, volume#.iloc[-78*365:] # Use last 1 year of data for backtesting
+    return close_prices, volume
 
 
 def _cross_sectional_zscore(frame: pd.DataFrame) -> pd.DataFrame:
@@ -112,11 +112,16 @@ def build_signal_scores(
 ) -> pd.DataFrame:
     close_prices, volume = extract_close_volume_frames(market_data)
     momentum_windows = _normalize_windows(momentum_windows)
+    max_momentum_window = max(momentum_windows)
 
     if volume_window <= 0:
         raise ValueError("volume_window must be positive.")
     if volume_cap <= 0:
         raise ValueError("volume_cap must be positive.")
+    
+    # concat a sub dataframe with values equal to close_prices.iloc[0] and length max_momentum_window - 1 for momentum features calculation
+    initial_row = close_prices.iloc[0].to_frame().T
+    close_prices = pd.concat([initial_row] * (max_momentum_window - 1) + [close_prices])
 
     momentum_components = []
     for window in momentum_windows:
@@ -125,7 +130,10 @@ def build_signal_scores(
 
     momentum_score = sum(momentum_components) / len(momentum_components)
 
-    avg_volume = volume.rolling(window=volume_window, min_periods=volume_window).mean()
+    # remove the concat-ed initial rows
+    momentum_score = momentum_score.iloc[max_momentum_window - 1:]
+
+    avg_volume = volume.rolling(window=volume_window, min_periods=1).mean()
     relative_volume = volume.div(avg_volume.replace(0.0, np.nan))
     relative_volume = relative_volume.replace([np.inf, -np.inf], np.nan)
 
@@ -168,10 +176,19 @@ def build_weights(
     tickers = scores.columns
     n_assets = len(tickers)
     selection_count = _resolve_selection_count(top_selector=top_selector, n_assets=n_assets)
+    min_live_position = 0
 
     weights = pd.DataFrame(0.0, index=scores.index, columns=tickers, dtype=float)
+    nonzero_rows = scores.ne(0.0).any(axis=1).to_numpy()
+    if not nonzero_rows.any():
+        return weights
+    min_live_position = int(np.flatnonzero(nonzero_rows)[0])
 
-    for timestamp, row in tqdm(scores.iterrows(), total=len(scores), desc="Building weights", unit="timestamp"):
+    for row_position, (timestamp, row) in enumerate(
+        tqdm(scores.iterrows(), total=len(scores), desc="Building weights", unit="timestamp")
+    ):
+        if row_position < min_live_position:
+            continue
         clean_row = row.replace([np.inf, -np.inf], np.nan).fillna(0.0)
         if selection_count >= n_assets:
             selected = clean_row.index
