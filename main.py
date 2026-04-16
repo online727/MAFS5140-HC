@@ -1,7 +1,7 @@
 from data_feed import DataFeed
 from engine import BacktestEngine
 from evaluator import Evaluator
-from strategy import EqualWeightStrategy, MovingAverageStrategy, MeanVarianceStrategy
+from strategy import Strategy, MeanVarianceStrategy, MomentumStrategy
 
 def main():
     # 1. Define the path to the dataset
@@ -13,7 +13,7 @@ def main():
         feed = DataFeed(data_path)
         
         print("Initializing strategy...")
-        strategy = EqualWeightStrategy()
+        strategy = Strategy()
         
         engine = BacktestEngine(data_feed=feed, strategy=strategy)
         
