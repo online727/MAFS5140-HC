@@ -48,6 +48,6 @@ def generate_weights(data_path, output_path):
 
 if __name__ == "__main__":
     generate_weights(
-        data_path="data/mini1/validation.parquet",
+        data_path="data/final/validation.parquet",
         output_path="tools/output/strategy_weights.parquet",
     )
