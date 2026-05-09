@@ -449,7 +449,7 @@ class Strategy:
                 raw_weights = dict(set_weights)
         else:
             if set_names is None:
-                raw_weights = FEATURE_SETS_WEIGHTS[DEFAULT_WEIGHTS_COL].iloc[:4].to_dict()
+                raw_weights = {"diversified_best": 1.0}
             else:
                 raw_weights = {str(name): FEATURE_SETS_WEIGHTS.loc[name, DEFAULT_WEIGHTS_COL] for name in set_names}
 
@@ -463,7 +463,6 @@ class Strategy:
         for set_name in self.set_weights:
             selected = self._selected_features(set_name)
             required_features.update(feature for feature, _ in selected)
-        print(f"Required features num: {len(required_features)}")
 
         self.required_features = required_features
         self.engine = StreamingMomentumFeatureEngine()

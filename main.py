@@ -1,11 +1,17 @@
 from data_feed import DataFeed
 from engine import BacktestEngine
 from evaluator import Evaluator
-from strategy import Strategy, MeanVarianceStrategy, MomentumStrategy
+from strategy import Strategy
+from pathlib import Path
+import os
+
+p = Path(__file__).parent
+os.chdir(p)
+print(f"Current working directory: {os.getcwd()}")
 
 def main():
     # 1. Define the path to the dataset
-    data_path = "data/mini2/test.parquet" 
+    data_path = "./data/final/validation.parquet" 
     
     try:
         # 2. Initialize components
@@ -13,7 +19,11 @@ def main():
         feed = DataFeed(data_path)
         
         print("Initializing strategy...")
-        strategy = Strategy()
+
+        strategy = Strategy(
+            top_selector=10.0,
+            max_weight=0.1
+        )
         
         engine = BacktestEngine(data_feed=feed, strategy=strategy)
         
