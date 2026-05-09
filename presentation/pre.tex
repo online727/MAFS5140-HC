@@ -1,0 +1,294 @@
+\documentclass[aspectratio=169]{beamer}
+
+\usetheme{Madrid}
+\usecolortheme{default}
+\setbeamertemplate{navigation symbols}{}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+
+\title{Trading Strategy Design}
+\subtitle{Mean-Variance Allocation and Momentum Signal}
+\author{}
+\date{}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+\begin{frame}{1. Strategy Overview}
+  \begin{itemize}
+    \item The strategy combines two signals:
+    \begin{itemize}
+      \item Mean-variance allocation signal
+      \item Momentum signal
+    \end{itemize}
+    \item Mean-variance component:
+    \begin{itemize}
+      \item Estimates expected return and risk
+      \item Allocates capital across assets
+    \end{itemize}
+    \item Momentum component:
+    \begin{itemize}
+      \item Uses recent price movement and volume information
+      \item Ranks assets cross-sectionally
+    \end{itemize}
+    \item Final strategy blends the two components dynamically.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{2. Mean-Variance Strategy}
+  \begin{itemize}
+    \item Shrinkage-based Markowitz-style allocation model.
+    \item Uses recent asset returns to estimate:
+    \begin{itemize}
+      \item Expected return vector
+      \item Covariance matrix
+    \end{itemize}
+    \item Objective:
+    \begin{itemize}
+      \item Balance expected return and portfolio variance
+      \item Produce risk-aware portfolio weights
+    \end{itemize}
+    \item Additional portfolio control:
+    \begin{itemize}
+      \item Single-asset position cap
+    \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{2. Mean-Variance Formula}
+  \[
+    \max_{w}
+    \quad
+    \mu_{\text{shrunk}}^{\top} w
+    -
+    \frac{\gamma}{2}
+    w^{\top}\Sigma_{\text{shrunk}}w
+  \]
+
+  \[
+    \text{subject to}
+    \quad
+    w_i \leq \text{position cap}
+  \]
+
+  \vspace{0.4cm}
+
+  Required inputs:
+  \begin{itemize}
+    \item $\mu_{\text{shrunk}}$: shrinkage expected return vector
+    \item $\Sigma_{\text{shrunk}}$: shrinkage covariance matrix
+    \item $\gamma$: risk-aversion coefficient
+    \item Position cap: maximum weight for a single asset
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{2. Shrinkage Estimation}
+  \begin{itemize}
+    \item Expected return shrinkage:
+  \end{itemize}
+
+  \[
+    \mu_{\text{shrunk}}
+    =
+    (1-\lambda_{\mu})\mu_{\text{sample}}
+    +
+    \lambda_{\mu}\mu_{\text{target}}
+  \]
+
+  \[
+    \mu_{\text{target}} = 0
+  \]
+
+  \begin{itemize}
+    \item Covariance shrinkage:
+  \end{itemize}
+
+  \[
+    \Sigma_{\text{shrunk}}
+    =
+    (1-\lambda_{\Sigma})\Sigma_{\text{sample}}
+    +
+    \lambda_{\Sigma}\Sigma_{\text{diag}}
+  \]
+
+  \begin{itemize}
+    \item Purpose: reduce noise in short-window estimates.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{3. Momentum Strategy}
+  \begin{itemize}
+    \item Cross-sectional ranking signal.
+    \item Based on:
+    \begin{itemize}
+      \item Short-term price movement
+      \item Volume confirmation
+    \end{itemize}
+    \item Core process:
+    \begin{enumerate}
+      \item Compute short-horizon price returns.
+      \item Standardize returns across assets using z-scores.
+      \item Adjust signal by relative volume.
+      \item Rank assets and select strongest candidates.
+      \item Assign score-based weights with a position cap.
+    \end{enumerate}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{3. Momentum Features}
+  Current feature list:
+
+  \vspace{0.2cm}
+
+  \begin{itemize}
+    \item Short-horizon price return
+    \item Multi-horizon momentum score
+    \item Cross-sectional momentum z-score
+    \item Relative volume
+    \item Volume-adjusted momentum score
+    \item Cross-sectional ranking score
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{3. Momentum Signal Construction}
+  Price momentum:
+  \[
+    r_{i,h}
+    =
+    \frac{P_{i,t}}{P_{i,t-h}} - 1
+  \]
+
+  Cross-sectional z-score:
+  \[
+    z_{i,h}
+    =
+    \frac{r_{i,h} - \bar{r}_{h}}{\sigma(r_h)}
+  \]
+
+  Multi-horizon momentum score:
+  \[
+    m_i
+    =
+    \frac{1}{H}\sum_{h \in H} z_{i,h}
+  \]
+\end{frame}
+
+\begin{frame}{3. Volume Adjustment and Ranking}
+  Relative volume:
+  \[
+    RV_i
+    =
+    \frac{V_{i,t}}{\overline{V}_{i,t}}
+  \]
+
+  Volume-adjusted momentum score:
+  \[
+    s_i
+    =
+    m_i \cdot f(RV_i)
+  \]
+
+  \vspace{0.3cm}
+
+  Portfolio construction:
+  \begin{itemize}
+    \item Rank assets by final score $s_i$.
+    \item Select strongest candidates.
+    \item Assign weights according to score strength.
+    \item Apply maximum weight limit for each selected asset.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{4. Combined Portfolio Construction}
+  Both sub-strategies output target weights:
+
+  \[
+    w_{\text{mv}}
+    \quad \text{and} \quad
+    w_{\text{mom}}
+  \]
+
+  Final blended portfolio:
+
+  \[
+    w_{\text{final}}
+    =
+    \alpha w_{\text{mom}}
+    +
+    (1-\alpha)w_{\text{mv}}
+  \]
+
+  \vspace{0.3cm}
+
+  Interpretation:
+  \begin{itemize}
+    \item Larger $\alpha$: stronger momentum influence.
+    \item Smaller $\alpha$: stronger mean-variance influence.
+    \item Blending, not model switching.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{5. Time-Varying Blend}
+  \begin{itemize}
+    \item $\alpha$ changes over time.
+    \item Early stage:
+    \begin{itemize}
+      \item Mean-variance model has limited historical data.
+      \item Momentum signal receives more weight.
+    \end{itemize}
+    \item Later stage:
+    \begin{itemize}
+      \item More data is available for return and risk estimation.
+      \item Mean-variance allocation receives more weight.
+    \end{itemize}
+  \end{itemize}
+
+  \vspace{0.2cm}
+
+  \[
+    \text{Fast signal-driven model}
+    \quad \longrightarrow \quad
+    \text{Risk-aware allocation model}
+  \]
+\end{frame}
+
+\begin{frame}{6. Future Improvements}
+  Improvement 1: momentum feature engineering
+  \begin{itemize}
+    \item Add more predictive features:
+    \begin{itemize}
+      \item Volatility
+      \item Turnover
+      \item Short-term reversal
+      \item Liquidity
+      \item Price acceleration
+    \end{itemize}
+    \item Use machine learning models to combine features.
+    \item Predict future returns or ranking scores.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{6. Future Improvements}
+  Improvement 2: better strategy integration
+  \begin{itemize}
+    \item Current method directly blends two complete weight vectors.
+    \item Alternative structure:
+    \begin{enumerate}
+      \item Use momentum model to select a fixed number of candidate stocks.
+      \item Run mean-variance optimization only within the selected universe.
+      \item Let mean-variance decide final individual weights.
+    \end{enumerate}
+    \item Interpretation:
+    \begin{itemize}
+      \item Momentum decides what to trade.
+      \item Mean-variance decides how much to allocate.
+    \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\end{document}
